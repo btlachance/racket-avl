@@ -1,77 +1,56 @@
-#lang racket/base
+#lang typed/racket/base
 ;
 ; AVL - Binary Search Tree
 ;
 
 (require racket/generator
-         racket/contract
+         racket/bool
          racket/match)
 
 (provide avl?)
 
-(provide
-  (contract-out
-    (make-avl (-> (-> any/c any/c boolean?) avl?))
-    (make-avleq (-> (-> any/c any/c boolean?) avl?))
-    (make-avleqv (-> (-> any/c any/c boolean?) avl?))
-    (make-custom-avl (-> (-> any/c any/c boolean?)
-                         (-> any/c any/c boolean?) avl?))
-    (avl-copy (-> avl? avl?))
-    (avl-add (-> avl? any/c avl?))
-    (avl-add! (-> avl? any/c void?))
-    (avl-remove (-> avl? any/c avl?))
-    (avl-remove! (-> avl? any/c void?))
-    (avl-min (-> avl? any/c))
-    (avl-max (-> avl? any/c))
-    (avl-pop-min (-> avl? (values any/c avl?)))
-    (avl-pop-min! (-> avl? any/c))
-    (avl-pop-max (-> avl? (values any/c avl?)))
-    (avl-pop-max! (-> avl? any/c))
-    (avl-empty? (-> avl? boolean?))
-    (avl-equal? (-> any/c boolean?))
-    (avl-eqv? (-> any/c boolean?))
-    (avl-eq? (-> any/c boolean?))
-    (avl-contains? (-> avl? any/c boolean?))
-    (avl->list (-> avl? list?))
-    (in-avl (-> avl? sequence?))
-    (in-avl/reverse (-> avl? sequence?))))
-
 
 ;; Wrapper to hide AVL tree nodes from the user.
 ;; Possibly mutable, unlike the individual nodes.
-(struct avl
-  (<=? =? (root #:mutable)))
+(struct (a) avl
+  ([<=? : (-> a a Boolean)] [=? : (-> a a Boolean)] [root : (U (node a) False)])
+  #:mutable)
 
 ;; An immutable tree node.
-(struct node
-  (left right value height))
+(struct (a) node
+  ([left : (U False (node a))] [right : (U False (node a))] [value : a] [height : Integer]))
 
 
 ;; Create an empty tree with specified comparator,
 ;; that determines two values are identical using equal?.
+(: make-avl (All (a) (-> (-> a a Boolean) (avl a))))
 (define (make-avl <=?)
   (avl <=? equal? #f))
 
 
 ;; Create an empty tree with specified comparator,
 ;; that determines two values are identical using eq?.
+(: make-avleq (All (a) (-> (-> a a Boolean) (avl a))))
 (define (make-avleq <=?)
   (avl <=? eq? #f))
 
 
 ;; Create an empty tree with specified comparator,
 ;; that determines two values are identical using eqv?.
+(: make-avleqv (All (a) (-> (-> a a Boolean) (avl a))))
 (define (make-avleqv <=?)
   (avl <=? eqv? #f))
 
 
 ;; Create an empty tree with specified comparator and equality predicate.
+(: make-custom-avl (All (a) (-> (-> a a Boolean) (-> a a Boolean) (avl a))))
 (define (make-custom-avl <=? =?)
   (avl <=? =? #f))
 
 
 ;; Determine whether the value is an AVL tree have been
 ;; created using `make-avl`.
+(: avl-equal? (-> Any Boolean))
 (define (avl-equal? v)
   (and (avl? v)
        (eq? equal? (avl-=? v))))
@@ -79,6 +58,7 @@
 
 ;; Determine whether the value is an AVL tree have been
 ;; created using `make-avleqv`.
+(: avl-eqv? (-> Any Boolean))
 (define (avl-eqv? v)
   (and (avl? v)
        (eq? eqv? (avl-=? v))))
@@ -86,18 +66,21 @@
 
 ;; Determine whether the value is an AVL tree have been
 ;; created using `make-avleq`.
+(: avl-eq? (-> Any Boolean))
 (define (avl-eq? v)
   (and (avl? v)
        (eq? eq? (avl-=? v))))
 
 
 ;; Determine whether is the AVL tree empty or not.
+(: avl-empty? (All (a) (-> (avl a) Boolean)))
 (define (avl-empty? tree)
   (not (avl-root tree)))
 
 
 ;; Create copy of the AVL tree.
 ;; Pretty cheap since nodes are immutable.
+(: avl-copy (All (a) (-> (avl a) (avl a))))
 (define (avl-copy tree)
   (match tree
     ((avl <=? =? root)
@@ -105,6 +88,7 @@
 
 
 ;; Create new tree including given value.
+(: avl-add (All (a) (-> (avl a) a (avl a))))
 (define (avl-add tree value)
   (match tree
     ((avl <=? =? root)
@@ -112,6 +96,7 @@
 
 
 ;; Modify an existing tree to include given value.
+(: avl-add! (All (a) (-> (avl a) a Void)))
 (define (avl-add! tree value)
   (match tree
     ((avl <=? =? root)
@@ -119,6 +104,7 @@
 
 
 ;; Perform the non-modifying addition of a value into the tree.
+(: add (All (a) (-> (-> a a Boolean) (-> a a Boolean) (U (node a) False) a (node a))))
 (define (add <=? =? parent new-value)
   (match parent
     ((node left right value height)
@@ -139,18 +125,19 @@
 
 
 ;; Rebalance tree node if required.
+(: rebalance (All (a) (-> (node a) (node a))))
 (define (rebalance parent)
   (match parent
     ((node left right value _)
      (cond
        ((= (balance parent) 2)
-        (if (= (balance left) -1)
+        (if (and (= (balance left) -1) (not (false? left)))
             (let ((left (rotate-left left)))
               (rotate-right (make-node left right value)))
             (rotate-right parent)))
 
        ((= (balance parent) -2)
-        (if (= (balance right) 1)
+        (if (and (= (balance right) 1) (not (false? right)))
             (let ((right (rotate-right right)))
               (rotate-left (make-node left right value)))
             (rotate-left parent)))
@@ -159,16 +146,21 @@
 
 
 ;; Create right-rotated version of the node.
+(: rotate-right (All (a) (-> (node a) (node a))))
 (define (rotate-right parent)
   (match parent
     ((node left right value _)
      (match left
+       ;; Isn't an "else" missing here? What if left is #f? rotate-left seems
+       ;; to have the same omission, but it's probably OK due to the balance
+       ;; checks called in rebalance
        ((node l-left l-right l-value _)
         (let ((new-right (make-node l-right right value)))
           (make-node l-left new-right l-value)))))))
 
 
 ;; Create left-rotated version of the node.
+(: rotate-left (All (a) (-> (node a) (node a))))
 (define (rotate-left parent)
   (match parent
     ((node left right value _)
@@ -180,16 +172,19 @@
 
 ;; Create new node, automatically computing height using the
 ;; higher of left and right children.
+(: make-node (All (a) (-> (Option (node a)) (Option (node a)) a (node a))))
 (define (make-node left right value)
   (node left right value (add1 (max (height right) (height left)))))
 
 
 ;; Return height of node or 0 for #f.
+(: height (All (a) (-> (U (node a) False) Integer)))
 (define (height maybe-node)
   (if maybe-node (node-height maybe-node) 0))
 
 
 ;; Return balance for node or 0 for #f.
+(: balance (All (a) (-> (U (node a) False) Integer)))
 (define (balance maybe-node)
   (match maybe-node
     ((node left right _ _)
@@ -200,6 +195,7 @@
 
 
 ;; Return minimal (leftmost) value in the tree.
+(: avl-min (All (a) (-> (avl a) a)))
 (define (avl-min tree)
   (match tree
     ((avl _ _ #f)
@@ -210,6 +206,7 @@
 
 
 ;; Return maximal (rightmost) value in the tree.
+(: avl-max (All (a) (-> (avl a) a)))
 (define (avl-max tree)
   (match tree
     ((avl _ _ #f)
@@ -220,6 +217,7 @@
 
 
 ;; Recursively reach leftmost value in the tree of nodes.
+(: leftmost (All (a) (-> (node a) a)))
 (define (leftmost parent)
   (match parent
     ((node #f _ value _)
@@ -230,6 +228,7 @@
 
 
 ;; Recursively reach rightmost value in the tree of nodes.
+(: rightmost (All (a) (-> (node a) a)))
 (define (rightmost parent)
   (match parent
     ((node _ #f value _)
@@ -240,6 +239,7 @@
 
 
 ;; Return tree's minimal item and a new tree without it.
+(: avl-pop-min (All (a) (-> (avl a) (Values a (avl a)))))
 (define (avl-pop-min tree)
   (match tree
     ((avl _ _ #f)
@@ -251,6 +251,7 @@
 
 
 ;; Remove tree's minimal item and return it.
+(: avl-pop-min! (All (a) (-> (avl a) a)))
 (define (avl-pop-min! tree)
   (match tree
     ((avl _ _ #f)
@@ -264,6 +265,7 @@
 
 ;; Recursively rebuild nodes without the leftmost node,
 ;; returning it's value and a new tree of nodes.
+(: pop-min (All (a) (-> (node a) (Values a (node a)))))
 (define (pop-min parent)
   (match parent
     ((node #f right value _)
@@ -275,6 +277,7 @@
 
 
 ;; Return tree's maximal item and a new tree without it.
+(: avl-pop-max (All (a) (-> (avl a) (Values a (avl a)))))
 (define (avl-pop-max tree)
   (match tree
     ((avl _ _ #f)
@@ -286,6 +289,7 @@
 
 
 ;; Remove tree's maximal item and return it.
+(: avl-pop-max! (All (a) (-> (avl a) a)))
 (define (avl-pop-max! tree)
   (match tree
     ((avl _ _ #f)
@@ -299,6 +303,7 @@
 
 ;; Recursively rebuild nodes without the rightmost node,
 ;; returning it's value and a new tree of nodes.
+(: pop-max (All (a) (-> (node a) (Values a (node a)))))
 (define (pop-max parent)
   (match parent
     ((node left #f value _)
@@ -310,6 +315,7 @@
 
 
 ;; Return new AVL tree without specified value.
+(: avl-remove (All (a) (-> (avl a) a (avl a))))
 (define (avl-remove tree value)
   (match tree
     ((avl <=? =? root)
@@ -319,6 +325,7 @@
 
 
 ;; Remove specified value from the AVL tree.
+(: avl-remove! (All (a) (-> (avl a) a Void)))
 (define (avl-remove! tree value)
   (match tree
     ((avl <=? =? root)
@@ -329,6 +336,7 @@
 
 ;; Return node tree without specified target.
 ;; If the value is not present within the tree, raise #f.
+(: remove-value (All (a) (-> (-> a a Boolean) (-> a a Boolean) (node a) a (node a))))
 (define (remove-value <=? =? parent victim)
   (match parent
     ((node left right value _)
@@ -354,6 +362,7 @@
 
 
 ;; Determine whether the tree contains specified value.
+(: avl-contains? (All (a) (-> (avl a) a Boolean)))
 (define (avl-contains? tree value)
   (match tree
     ((avl <=? =? root)
@@ -361,6 +370,7 @@
 
 
 ;; Return value corresponding to specified needle.
+(: contains? (All (a) (-> (-> a a Boolean) (-> a a Boolean) (node a) a Boolean)))
 (define (contains? <=? =? parent needle)
   (match parent
     ((node left right value _)
@@ -378,6 +388,7 @@
 
 
 ;; Create ordered value sequence.
+(: in-avl (All (a) (-> (avl a) (Sequenceof a))))
 (define (in-avl tree)
   (in-generator
     (let iterate ((parent (avl-root tree)))
@@ -391,6 +402,7 @@
 
 
 ;; Create reverse ordered value sequence.
+(: in-avl/reverse (All (a) (-> (avl a) (Sequenceof a))))
 (define (in-avl/reverse tree)
   (in-generator
     (let iterate ((parent (avl-root tree)))
@@ -404,6 +416,7 @@
 
 
 ;; Convert the tree to a list.
+(: avl->list (All (a) (-> (avl a) (Listof a))))
 (define (avl->list tree)
   (for/list ((x (in-avl tree))) x))
 
