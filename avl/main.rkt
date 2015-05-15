@@ -198,10 +198,9 @@
 (: avl-min (All (a) (-> (avl a) a)))
 (define (avl-min tree)
   (match tree
-    ((avl _ _ #f)
-     (error 'avl-min "empty tree"))
-
     ((avl _ _ root)
+     (when (false? root)
+       (error 'avl-min "empty tree"))
      (leftmost root))))
 
 
@@ -209,10 +208,9 @@
 (: avl-max (All (a) (-> (avl a) a)))
 (define (avl-max tree)
   (match tree
-    ((avl _ _ #f)
-     (error 'avl-min "empty tree"))
-
     ((avl _ _ root)
+     (when (false? root)
+       (error 'avl-max "empty tree"))
      (rightmost root))))
 
 
@@ -220,32 +218,29 @@
 (: leftmost (All (a) (-> (node a) a)))
 (define (leftmost parent)
   (match parent
-    ((node #f _ value _)
-     (begin value))
-
-    ((node left _ _ _)
-     (leftmost left))))
+    ((node left _ value _)
+     (if (false? left)
+         value
+         (leftmost left)))))
 
 
 ;; Recursively reach rightmost value in the tree of nodes.
 (: rightmost (All (a) (-> (node a) a)))
 (define (rightmost parent)
   (match parent
-    ((node _ #f value _)
-     (begin value))
-
-    ((node _ right _ _)
-     (rightmost right))))
+    ((node _ right value _)
+     (if (false? right)
+         value
+         (rightmost right)))))
 
 
 ;; Return tree's minimal item and a new tree without it.
 (: avl-pop-min (All (a) (-> (avl a) (Values a (avl a)))))
 (define (avl-pop-min tree)
   (match tree
-    ((avl _ _ #f)
-     (error 'avl-pop-min "empty tree"))
-
     ((avl <=? =? root)
+     (when (false? root)
+       (error 'avl-pop-min "empty tree"))
      (let-values (((value new-root) (pop-min root)))
        (values value (avl <=? =? new-root))))))
 
@@ -254,10 +249,9 @@
 (: avl-pop-min! (All (a) (-> (avl a) a)))
 (define (avl-pop-min! tree)
   (match tree
-    ((avl _ _ #f)
-     (error 'avl-pop-min! "empty tree"))
-
     ((avl _ _ root)
+     (when (false? root)
+       (error 'avl-pop-min! "empty tree"))
      (let-values (((value new-root) (pop-min root)))
        (set-avl-root! tree new-root)
        (begin value)))))
@@ -268,22 +262,20 @@
 (: pop-min (All (a) (-> (node a) (Values a (node a)))))
 (define (pop-min parent)
   (match parent
-    ((node #f right value _)
-     (values value right))
-
     ((node left right value _)
-     (let-values (((result left) (pop-min left)))
-       (values result (rebalance (make-node left right value)))))))
+     (if (and (false? left) (not (false? right)))
+         (values value right)
+         (let-values (((result left) (pop-min left)))
+           (values result (rebalance (make-node left right value))))))))
 
 
 ;; Return tree's maximal item and a new tree without it.
 (: avl-pop-max (All (a) (-> (avl a) (Values a (avl a)))))
 (define (avl-pop-max tree)
   (match tree
-    ((avl _ _ #f)
-     (error 'avl-pop-max "empty tree"))
-
     ((avl <=? =? root)
+     (when (false? root)
+       (error 'avl-pop-max "empty tree"))
      (let-values (((value new-root) (pop-max root)))
        (values value (avl <=? =? new-root))))))
 
